@@ -1,0 +1,6 @@
+<!-- res/drawable/boton_redondo.xml -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="1000sp"/>
+    <solid android:color="@color/red_background"/> <!-- Rojo directamente o usa @color/tu_color_rojo -->
+</shape>

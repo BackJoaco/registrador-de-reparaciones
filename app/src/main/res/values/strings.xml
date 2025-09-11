@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Reparaciones</string>
+    <string name="ordenar_por_fecha">Ordenar por fecha</string>
+    <string name="buscar">Buscar</string>
+</resources>

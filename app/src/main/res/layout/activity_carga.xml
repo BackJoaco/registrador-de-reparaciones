@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_height="match_parent"
+    android:layout_width="match_parent"
+    android:orientation="vertical">
+    <android.widget.Button
+        android:id="@+id/btnGuardar"
+        android:layout_width="wrap_content"
+        android:background="@drawable/boton_redondo"
+        android:layout_height="wrap_content"
+        android:text="Guardar"
+        android:textColor="@color/white"
+        android:layout_alignParentRight="true"
+        android:layout_marginTop="5dp"/>
+    <android.widget.Button
+        android:layout_marginTop="5dp"
+        android:id="@+id/btnCerrar"
+        android:textColor="@color/white"
+        android:background="@drawable/boton_redondo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Cerrar"
+        />
+    <EditText
+        android:id="@+id/nombre"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/btnGuardar"
+        android:hint="Nombre"
+        android:paddingTop="20sp"
+        android:gravity="center"/>
+    <EditText
+        android:id="@+id/apellido"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Apellido"
+        android:gravity="center"
+        android:layout_below="@+id/nombre"/>
+    <EditText
+        android:id="@+id/auto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Auto"
+        android:layout_below="@+id/apellido"
+        android:gravity="center"/>
+    <EditText
+        android:id="@+id/etFecha"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Fecha (DD/MM/AAAA)"
+        android:focusable="false"
+        android:clickable="true"
+        android:layout_below="@+id/auto"
+        android:gravity="center"/>
+    <EditText
+        android:id="@+id/etTelefono"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Número de Teléfono"
+        android:inputType="phone"
+        android:layout_below="@+id/etFecha"
+        android:gravity="center"/>
+    <CheckBox
+        android:id="@+id/delanteroIzquierdo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Delantero Izquierdo"
+        android:layout_alignTop="@+id/auto_imagen"/>
+
+    <CheckBox
+        android:id="@+id/traseroIzquierdo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Trasero izquierdo"
+        android:layout_alignBottom="@+id/auto_imagen"/>
+    <ImageView
+        android:id="@+id/auto_imagen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/car_icon"
+        android:layout_below="@+id/etTelefono"
+        android:layout_centerInParent="true"
+        android:layout_marginTop="50dp"
+        android:rotation="-90"/>
+    <CheckBox
+        android:id="@+id/delanteroDerecho"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Delantero derecho"
+        android:layout_alignTop="@+id/auto_imagen"
+        android:layout_toRightOf="@+id/auto_imagen"/>
+
+    <CheckBox
+        android:id="@+id/traseroDerecho"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Trasero derecho"
+        android:layout_alignBottom="@+id/auto_imagen"
+        android:layout_toRightOf="@+id/auto_imagen"/>
+
+
+
+    <EditText
+        android:id="@+id/costo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Costo"
+        android:layout_below="@+id/traseroDerecho"
+        android:gravity="center"
+        android:layout_marginTop="20dp"/>
+</RelativeLayout>
