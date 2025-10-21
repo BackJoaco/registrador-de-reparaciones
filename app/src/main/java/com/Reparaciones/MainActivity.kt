@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText // Para el input de búsqueda
@@ -28,8 +29,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listaReparaciones: MutableList<Reparacion>
     private lateinit var adapter: ArrayAdapter<String>
     private lateinit var toolbar: Toolbar
-
+    private lateinit var btnLimpiarBusqueda: Button
     private var isSortingAscending = true
+    private var ultimaBusqueda: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +56,13 @@ class MainActivity : AppCompatActivity() {
         listViewReparaciones.setOnItemClickListener { parent, view, position, id ->
             // Asegúrate de usar la listaReparaciones (filtrada/ordenada) para obtener el item correcto
             mostrarDetallesReparacion(listaReparaciones[position])
+        }
+
+        btnLimpiarBusqueda = findViewById(R.id.btnLimpiarBusqueda)
+        btnLimpiarBusqueda.setOnClickListener {
+            ultimaBusqueda = null
+            cargarReparaciones(false)
+            btnLimpiarBusqueda.visibility = View.GONE
         }
     }
 
@@ -92,9 +101,9 @@ class MainActivity : AppCompatActivity() {
     private fun mostrarDialogoBusqueda() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Buscar Reparación")
-
         val input = EditText(this)
         input.hint = "Nombre o Apellido del cliente"
+        input.setText(ultimaBusqueda ?: "")
         builder.setView(input)
 
         builder.setPositiveButton("Buscar") { dialog, _ ->
@@ -117,8 +126,9 @@ class MainActivity : AppCompatActivity() {
     private fun filtrarReparaciones(query: String) {
         adapter.clear()
         val filteredList = listaReparaciones.filter {
-            it.nombre.contains(query, ignoreCase = true) ||
-                    it.apellido.contains(query, ignoreCase = true)
+            val texto = "${it.nombre} ${it.apellido}".lowercase()
+            val partes = query.lowercase().split(" ")
+            partes.all { texto.contains(it) }
         }
 
         if (filteredList.isEmpty()) {
@@ -130,6 +140,8 @@ class MainActivity : AppCompatActivity() {
             adapter.add(displayText)
         }
         adapter.notifyDataSetChanged()
+        ultimaBusqueda = query
+        btnLimpiarBusqueda.visibility = View.VISIBLE
     }
 
 
