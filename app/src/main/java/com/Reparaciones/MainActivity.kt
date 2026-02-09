@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title = "Reparaciones (Local)" // Cambiamos título para reflejar estado
+        supportActionBar?.title = "Reparaciones"
 
         listViewReparaciones = findViewById(R.id.listViewReparaciones)
         btnNuevaReparacion = findViewById(R.id.btnNuevaReparacion)
@@ -93,7 +93,7 @@ class MainActivity : AppCompatActivity() {
     private fun ejecutarSincronizacion() {
         lifecycleScope.launch {
             val sincronizador = Sincronizador(applicationContext)
-            val resultado = sincronizador.sincronizarPendientes()
+            val resultado = sincronizador.sincronizar()
 
             // Solo mostramos mensaje si realmente pasó algo interesante (no "Todo al día")
             if (resultado != "Todo está al día.") {
