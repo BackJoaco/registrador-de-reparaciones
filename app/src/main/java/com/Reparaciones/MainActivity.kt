@@ -1,6 +1,5 @@
 package com.Reparaciones
 
-import Reparacion
 import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
@@ -8,24 +7,21 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.EditText // Para el input de búsqueda
+import android.widget.EditText
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar // Importar Toolbar
-import com.google.gson.Gson
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+import androidx.appcompat.widget.Toolbar
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Comparator
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var listViewReparaciones: ListView
-    private lateinit var btnNuevaReparacion: android.widget.Button // Asumiendo un botón flotante o similar
+    private lateinit var btnNuevaReparacion: Button
     private lateinit var listaReparaciones: MutableList<Reparacion>
     private lateinit var adapter: ArrayAdapter<String>
     private lateinit var toolbar: Toolbar
@@ -38,11 +34,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         toolbar = findViewById(R.id.toolbar)
-        setSupportActionBar(toolbar) // Configura la Toolbar como la ActionBar de la actividad
-        supportActionBar?.title = "Reparaciones" // Título de la app en la Toolbar
+        setSupportActionBar(toolbar)
+        supportActionBar?.title = "Reparaciones (Local)" // Cambiamos título para reflejar estado
 
         listViewReparaciones = findViewById(R.id.listViewReparaciones)
         btnNuevaReparacion = findViewById(R.id.btnNuevaReparacion)
+        btnLimpiarBusqueda = findViewById(R.id.btnLimpiarBusqueda)
 
         listaReparaciones = mutableListOf()
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_2, android.R.id.text1, mutableListOf())
@@ -54,26 +51,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         listViewReparaciones.setOnItemClickListener { parent, view, position, id ->
-            // Asegúrate de usar la listaReparaciones (filtrada/ordenada) para obtener el item correcto
-            mostrarDetallesReparacion(listaReparaciones[position])
+            if (position < listaReparaciones.size) {
+                mostrarDetallesReparacion(listaReparaciones[position])
+            }
         }
 
-        btnLimpiarBusqueda = findViewById(R.id.btnLimpiarBusqueda)
         btnLimpiarBusqueda.setOnClickListener {
             ultimaBusqueda = null
             cargarReparaciones(false)
             btnLimpiarBusqueda.visibility = View.GONE
         }
+        ejecutarSincronizacion()
     }
 
     override fun onResume() {
         super.onResume()
-        cargarReparaciones(false) // Carga las reparaciones inicialmente sin aplicar ordenamiento extra si ya hay uno
+        // Cada vez que volvemos a la pantalla, recargamos desde la Base de Datos local
+        cargarReparaciones(false)
     }
 
-    // --- Métodos para la Toolbar ---
+    // --- Métodos Toolbar ---
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.main_menu, menu) // Infla tu archivo de menú
+        menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
 
@@ -91,18 +90,87 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun ejecutarSincronizacion() {
+        lifecycleScope.launch {
+            val sincronizador = Sincronizador(applicationContext)
+            val resultado = sincronizador.sincronizarPendientes()
+
+            // Solo mostramos mensaje si realmente pasó algo interesante (no "Todo al día")
+            if (resultado != "Todo está al día.") {
+                Toast.makeText(this@MainActivity, resultado, Toast.LENGTH_LONG).show()
+                cargarReparaciones(false) // Refrescamos la lista
+            }
+        }
+    }
+
     private fun toggleSortOrder() {
-        isSortingAscending = !isSortingAscending // Invierte el estado
-        cargarReparaciones(true) // Recarga y reordena la lista con el nuevo criterio
+        isSortingAscending = !isSortingAscending
+        ordenarLista()
+        actualizarAdapter()
         val orderText = if (isSortingAscending) "más antiguas primero" else "más recientes primero"
         Toast.makeText(this, "Ordenando por fecha: $orderText", Toast.LENGTH_SHORT).show()
     }
+
+    // --- LÓGICA DE BASE DE DATOS (ROOM) ---
+
+    private fun cargarReparaciones(applySort: Boolean) {
+        lifecycleScope.launch {
+            // 1. Obtenemos la instancia de la base de datos
+            val database = AppDatabase.getDatabase(applicationContext)
+
+            // 2. Ejecutamos la consulta en segundo plano (suspend function)
+            val reparacionesLocales = database.reparacionDao().obtenerTodas()
+
+            // 3. Actualizamos la lista en memoria
+            listaReparaciones.clear()
+            listaReparaciones.addAll(reparacionesLocales)
+
+            // 4. Aplicamos ordenamiento y actualizamos la UI
+            if (applySort || isSortingAscending) {
+                ordenarLista()
+            }
+
+            if (!ultimaBusqueda.isNullOrEmpty()) {
+                filtrarReparaciones(ultimaBusqueda!!)
+            } else {
+                actualizarAdapter()
+            }
+        }
+    }
+
+    private fun ordenarLista() {
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        listaReparaciones.sortWith(Comparator { r1, r2 ->
+            try {
+                val date1 = dateFormat.parse(r1.fecha)
+                val date2 = dateFormat.parse(r2.fecha)
+                if (date1 != null && date2 != null) {
+                    if (isSortingAscending) date1.compareTo(date2) else date2.compareTo(date1)
+                } else 0
+            } catch (e: Exception) {
+                0
+            }
+        })
+    }
+
+    private fun actualizarAdapter(listaAVisualizar: List<Reparacion> = listaReparaciones) {
+        adapter.clear()
+        for (reparacion in listaAVisualizar) {
+            val displayText = "${reparacion.nombre} ${reparacion.apellido}\nFecha: ${reparacion.fecha}"
+            adapter.add(displayText)
+        }
+        adapter.notifyDataSetChanged()
+    }
+
+    // --- Búsqueda ---
+    // Mantenemos la lógica de búsqueda en memoria para aprovechar que ya cargamos los datos,
+    // aunque también podríamos usar el método DAO 'buscar(query)' si la lista fuera enorme.
 
     private fun mostrarDialogoBusqueda() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Buscar Reparación")
         val input = EditText(this)
-        input.hint = "Nombre o Apellido del cliente"
+        input.hint = "Nombre o Apellido"
         input.setText(ultimaBusqueda ?: "")
         builder.setView(input)
 
@@ -111,20 +179,18 @@ class MainActivity : AppCompatActivity() {
             if (query.isNotEmpty()) {
                 filtrarReparaciones(query)
             } else {
-                Toast.makeText(this, "Ingresa un término de búsqueda.", Toast.LENGTH_SHORT).show()
-                cargarReparaciones(false) // Si está vacío, vuelve a mostrar todo
+                cargarReparaciones(false)
             }
             dialog.dismiss()
         }
         builder.setNegativeButton("Cancelar") { dialog, _ ->
-            cargarReparaciones(false) // Si cancela, vuelve a mostrar la lista completa
+            cargarReparaciones(false)
             dialog.cancel()
         }
         builder.show()
     }
 
     private fun filtrarReparaciones(query: String) {
-        adapter.clear()
         val filteredList = listaReparaciones.filter {
             val texto = "${it.nombre} ${it.apellido}".lowercase()
             val partes = query.lowercase().split(" ")
@@ -132,67 +198,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (filteredList.isEmpty()) {
-            Toast.makeText(this, "No se encontraron resultados para '$query'.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No se encontraron resultados.", Toast.LENGTH_SHORT).show()
         }
 
-        for (reparacion in filteredList) {
-            val displayText = "${reparacion.nombre} ${reparacion.apellido}\nFecha: ${reparacion.fecha}"
-            adapter.add(displayText)
-        }
-        adapter.notifyDataSetChanged()
+        actualizarAdapter(filteredList)
         ultimaBusqueda = query
         btnLimpiarBusqueda.visibility = View.VISIBLE
     }
 
-
-    private fun cargarReparaciones(applySort: Boolean) {
-        listaReparaciones.clear()
-        adapter.clear()
-
-        try {
-            val fileInputStream = openFileInput("reparaciones.txt")
-            val inputStreamReader = InputStreamReader(fileInputStream)
-            val bufferedReader = BufferedReader(inputStreamReader)
-            val gson = Gson()
-            var line: String?
-
-            while (bufferedReader.readLine().also { line = it } != null) {
-                val reparacion: Reparacion = gson.fromJson(line, Reparacion::class.java)
-                listaReparaciones.add(reparacion)
-            }
-            bufferedReader.close()
-
-            // Solo ordena si se pidió (para el toggle) o si es la carga inicial
-            if (applySort) {
-                val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                listaReparaciones.sortWith(Comparator { r1, r2 ->
-                    val date1 = dateFormat.parse(r1.fecha)
-                    val date2 = dateFormat.parse(r2.fecha)
-                    if (isSortingAscending) date1.compareTo(date2) else date2.compareTo(date1)
-                })
-            } else { // Si no se aplica ordenamiento, asegura un orden predeterminado (ej. el original de carga)
-                // Opcional: si quieres que sin aplicar sort explícito, siempre se mantenga un orden base,
-                // podrías ordenar por un campo predeterminado aquí (ej. por fecha ascendente por defecto)
-                val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                listaReparaciones.sortWith(Comparator { r1, r2 ->
-                    val date1 = dateFormat.parse(r1.fecha)
-                    val date2 = dateFormat.parse(r2.fecha)
-                    date1.compareTo(date2)
-                })
-            }
-
-
-            for (reparacion in listaReparaciones) {
-                val displayText = "${reparacion.nombre} ${reparacion.apellido}\nFecha: ${reparacion.fecha}"
-                adapter.add(displayText)
-            }
-            adapter.notifyDataSetChanged()
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "No se encontraron reparaciones guardadas o hubo un error al cargar.", Toast.LENGTH_SHORT).show()
-        }
-    }
+    // --- Detalles y Eliminación ---
 
     private fun mostrarDetallesReparacion(reparacion: Reparacion) {
         val detalles = StringBuilder()
@@ -200,78 +214,54 @@ class MainActivity : AppCompatActivity() {
         detalles.append("Teléfono: ${reparacion.telefono}\n")
         detalles.append("Fecha: ${reparacion.fecha}\n")
         detalles.append("Auto: ${reparacion.auto}\n")
-        detalles.append("Amortiguadores: ${reparacion.amortiguadores.joinToString(", ")}\n")
-        detalles.append("Costo Final: $${String.format("%.2f", reparacion.costoFinal)}\n")
+
+        // CAMBIO: Ahora 'amortiguadores' es un String, no una lista. Lo mostramos directo.
+        detalles.append("Amortiguadores: ${reparacion.amortiguadores}\n")
+
+        detalles.append("Costo: $${String.format("%.2f", reparacion.costoFinal)}\n")
+
+        // Debug: Mostrar estado de sincronización (opcional)
+        val estadoSync = if (reparacion.esSincronizado) "Sí" else "Pendiente"
+        detalles.append("Sincronizado: $estadoSync\n")
 
         AlertDialog.Builder(this)
-            .setTitle("Detalles de la Reparación")
+            .setTitle("Detalles")
             .setMessage(detalles.toString())
-            .setPositiveButton("Cerrar") { dialog, _ ->
-                dialog.dismiss()
-            }
+            .setPositiveButton("Cerrar") { dialog, _ -> dialog.dismiss() }
             .setNeutralButton("Editar") { _, _ ->
                 val intent = Intent(this, CargaActivity::class.java)
-                val gson = Gson()
-                val reparacionJson = gson.toJson(reparacion)
-                intent.putExtra("reparacion_json", reparacionJson)
+                intent.putExtra("reparacion_obj", reparacion)
                 startActivity(intent)
             }
-            .setNegativeButton("Eliminar") { _, _ -> // Agrega el botón Eliminar
+            .setNegativeButton("Eliminar") { _, _ ->
                 mostrarDialogoConfirmacionEliminar(reparacion)
             }
             .show()
     }
 
-    // --- Nueva función para el diálogo de confirmación de eliminación ---
     private fun mostrarDialogoConfirmacionEliminar(reparacion: Reparacion) {
         AlertDialog.Builder(this)
             .setTitle("Confirmar Eliminación")
-            .setMessage("¿Estás seguro de que quieres eliminar la reparación de ${reparacion.nombre} ${reparacion.apellido} del ${reparacion.fecha}?")
+            .setMessage("¿Eliminar reparación de ${reparacion.nombre}?")
             .setPositiveButton("Sí, Eliminar") { dialog, _ ->
                 eliminarReparacion(reparacion)
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancelar") { dialog, _ ->
-                dialog.cancel()
-            }
+            .setNegativeButton("Cancelar") { dialog, _ -> dialog.cancel() }
             .show()
     }
 
-    // --- Nueva función para eliminar la reparación ---
-    private fun eliminarReparacion(reparacionAEliminar: Reparacion) {
-        val gson = Gson()
-        val reparacionesActualizadas = mutableListOf<Reparacion>()
+    private fun eliminarReparacion(reparacion: Reparacion) {
+        val id = reparacion.id ?: return
 
-        // Leer todas las reparaciones excepto la que se quiere eliminar
-        try {
-            val fileInputStream = openFileInput("reparaciones.txt")
-            val inputStreamReader = InputStreamReader(fileInputStream)
-            val bufferedReader = BufferedReader(inputStreamReader)
-            var line: String?
-            while (bufferedReader.readLine().also { line = it } != null) {
-                val rep: Reparacion = gson.fromJson(line, Reparacion::class.java)
-                if (rep.id != reparacionAEliminar.id) { // Solo añade las que NO son la que queremos eliminar
-                    reparacionesActualizadas.add(rep)
-                }
-            }
-            bufferedReader.close()
+        lifecycleScope.launch {
+            val db = AppDatabase.getDatabase(applicationContext)
+            db.reparacionDao().marcarComoEliminado(id)
 
-            // Escribir la lista actualizada de nuevo al archivo (sobrescribiendo)
-            val fileOutputStream = openFileOutput("reparaciones.txt", MODE_PRIVATE)
-            val outputStreamWriter = OutputStreamWriter(fileOutputStream)
-            for (rep in reparacionesActualizadas) {
-                outputStreamWriter.append(gson.toJson(rep)).append("\n")
-            }
-            outputStreamWriter.close()
+            Toast.makeText(this@MainActivity, "Eliminada.", Toast.LENGTH_SHORT).show()
+            cargarReparaciones(false) // Desaparecerá de la lista visual
 
-            Toast.makeText(this, "Reparación eliminada correctamente.", Toast.LENGTH_SHORT).show()
-            cargarReparaciones(false) // Recargar la lista para que refleje el cambio
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Error al eliminar la reparación: ${e.message}", Toast.LENGTH_LONG).show()
+            ejecutarSincronizacion()
         }
     }
-
-
 }

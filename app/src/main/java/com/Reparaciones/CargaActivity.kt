@@ -1,23 +1,18 @@
-package com.Reparaciones // Asegúrate de que este sea tu paquete real
+package com.Reparaciones
 
-import Reparacion
 import android.app.DatePickerDialog
 import android.os.Bundle
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.gson.Gson
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
-import java.util.UUID // Asegúrate de importar UUID
+import java.util.UUID // Necesario para generar IDs offline
 
 class CargaActivity : AppCompatActivity() {
 
@@ -34,7 +29,7 @@ class CargaActivity : AppCompatActivity() {
     private lateinit var btnGuardar: Button
     private lateinit var btnCerrar: Button
 
-    private var reparacionEditando: Reparacion? = null // Para guardar la reparación que se está editando
+    private var reparacionEditando: Reparacion? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,11 +49,10 @@ class CargaActivity : AppCompatActivity() {
         btnGuardar = findViewById(R.id.btnGuardar)
         btnCerrar = findViewById(R.id.btnCerrar)
 
+        // Configuración de Fecha
         val calendar = Calendar.getInstance()
         val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-
-        // --- Manejo de la fecha ---
-        etFecha.setText(dateFormat.format(calendar.time)) // Precarga con fecha actual por defecto
+        etFecha.setText(dateFormat.format(calendar.time))
 
         etFecha.setOnClickListener {
             val year = calendar.get(Calendar.YEAR)
@@ -71,37 +65,37 @@ class CargaActivity : AppCompatActivity() {
                     calendar.set(selectedYear, selectedMonth, selectedDay)
                     etFecha.setText(dateFormat.format(calendar.time))
                 },
-                year,
-                month,
-                day
+                year, month, day
             )
             datePickerDialog.show()
         }
-        // --- Fin manejo de la fecha ---
 
-        // --- Recibir datos de la reparación si se está editando ---
-        val reparacionJson = intent.getStringExtra("reparacion_json")
-        if (reparacionJson != null) {
-            val gson = Gson()
-            reparacionEditando = gson.fromJson(reparacionJson, Reparacion::class.java)
-            // Precargar campos con los datos de la reparación existente
-            reparacionEditando?.let { rep ->
-                etNombre.setText(rep.nombre)
-                etApellido.setText(rep.apellido)
-                etAuto.setText(rep.auto)
-                etFecha.setText(rep.fecha) // Usa la fecha de la reparación
-                etTelefono.setText(rep.telefono)
-                cbDelanteroDerecho.isChecked = rep.amortiguadores.contains("Delantero Derecho")
-                cbDelanteroIzquierdo.isChecked = rep.amortiguadores.contains("Delantero Izquierdo")
-                cbTraseroDerecho.isChecked = rep.amortiguadores.contains("Trasero Derecho")
-                cbTraseroIzquierdo.isChecked = rep.amortiguadores.contains("Trasero Izquierdo")
-                etCosto.setText(String.format(Locale.getDefault(), "%.2f", rep.costoFinal))
-            }
+        // --- Cargar datos si es edición ---
+        @Suppress("DEPRECATION")
+        reparacionEditando = intent.getSerializableExtra("reparacion_obj") as? Reparacion
+
+        reparacionEditando?.let { rep ->
+            etNombre.setText(rep.nombre)
+            etApellido.setText(rep.apellido)
+            etAuto.setText(rep.auto)
+            etFecha.setText(rep.fecha)
+            etTelefono.setText(rep.telefono)
+
+            // Lógica para marcar los checkboxes desde un String (separado por comas)
+            // Ejemplo de string en DB: "Delantero Derecho,Trasero Izquierdo"
+            val listaAmortiguadores = rep.amortiguadores.split(",")
+
+            cbDelanteroDerecho.isChecked = listaAmortiguadores.any { it.trim() == "Delantero Derecho" }
+            cbDelanteroIzquierdo.isChecked = listaAmortiguadores.any { it.trim() == "Delantero Izquierdo" }
+            cbTraseroDerecho.isChecked = listaAmortiguadores.any { it.trim() == "Trasero Derecho" }
+            cbTraseroIzquierdo.isChecked = listaAmortiguadores.any { it.trim() == "Trasero Izquierdo" }
+
+            etCosto.setText(String.format(Locale.US, "%.2f", rep.costoFinal))
         }
 
-        // Asignar listeners
+        // Listeners
         btnGuardar.setOnClickListener {
-            guardarReparacion()
+            validarYGuardar()
         }
 
         btnCerrar.setOnClickListener {
@@ -109,7 +103,7 @@ class CargaActivity : AppCompatActivity() {
         }
     }
 
-    private fun guardarReparacion() {
+    private fun validarYGuardar() {
         val nombre = etNombre.text.toString().trim()
         val apellido = etApellido.text.toString().trim()
         val auto = etAuto.text.toString().trim()
@@ -118,80 +112,62 @@ class CargaActivity : AppCompatActivity() {
         val costoFinalStr = etCosto.text.toString().trim()
 
         if (nombre.isEmpty() || apellido.isEmpty() || auto.isEmpty() || fecha.isEmpty() || telefono.isEmpty() || costoFinalStr.isEmpty()) {
-            Toast.makeText(this, "Por favor, completa todos los campos obligatorios.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Por favor, completa todos los campos.", Toast.LENGTH_SHORT).show()
             return
         }
 
         val costoFinal = costoFinalStr.toDoubleOrNull()
         if (costoFinal == null) {
-            Toast.makeText(this, "El costo final debe ser un número válido.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "El costo debe ser un número válido.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val amortiguadoresReparados = mutableListOf<String>()
-        if (cbDelanteroDerecho.isChecked) amortiguadoresReparados.add("Delantero Derecho")
-        if (cbDelanteroIzquierdo.isChecked) amortiguadoresReparados.add("Delantero Izquierdo")
-        if (cbTraseroDerecho.isChecked) amortiguadoresReparados.add("Trasero Derecho")
-        if (cbTraseroIzquierdo.isChecked) amortiguadoresReparados.add("Trasero Izquierdo")
+        // 1. Recopilar Checkboxes en una lista
+        val amortiguadoresLista = mutableListOf<String>()
+        if (cbDelanteroDerecho.isChecked) amortiguadoresLista.add("Delantero Derecho")
+        if (cbDelanteroIzquierdo.isChecked) amortiguadoresLista.add("Delantero Izquierdo")
+        if (cbTraseroDerecho.isChecked) amortiguadoresLista.add("Trasero Derecho")
+        if (cbTraseroIzquierdo.isChecked) amortiguadoresLista.add("Trasero Izquierdo")
 
-        // Crea el nuevo objeto Reparacion (o actualizado)
-        val nuevaReparacion = Reparacion(
-            id = reparacionEditando?.id ?: UUID.randomUUID().toString(), // Mantiene el ID si edita, crea uno nuevo si es nueva
+        // 2. Convertir lista a String para Room (separado por comas)
+        val amortiguadoresString = amortiguadoresLista.joinToString(",")
+
+        // 3. Definir el ID
+        // Si estamos editando, usamos el ID que ya tenía. Si es nuevo, generamos uno.
+        val idFinal = reparacionEditando?.id ?: UUID.randomUUID().toString()
+
+        val reparacionAGuardar = Reparacion(
+            id = idFinal,
             nombre = nombre,
             apellido = apellido,
             fecha = fecha,
             auto = auto,
-            amortiguadores = amortiguadoresReparados,
+            amortiguadores = amortiguadoresString, // Pasamos el String, no la lista
             costoFinal = costoFinal,
-            telefono = telefono
+            telefono = telefono,
+            esSincronizado = false // IMPORTANTE: Marcamos que aún no se ha subido a la nube
         )
 
-        val gson = Gson()
-        val reparacionesEnArchivo = mutableListOf<Reparacion>()
+        guardarEnBaseDeDatosLocal(reparacionAGuardar)
+    }
 
-        // 1. Leer todas las reparaciones existentes
-        try {
-            val fileInputStream = openFileInput("reparaciones.txt")
-            val inputStreamReader = InputStreamReader(fileInputStream)
-            val bufferedReader = BufferedReader(inputStreamReader)
-            var line: String?
-            while (bufferedReader.readLine().also { line = it } != null) {
-                val rep: Reparacion = gson.fromJson(line, Reparacion::class.java)
-                reparacionesEnArchivo.add(rep)
-            }
-            bufferedReader.close()
-        } catch (e: Exception) {
-            // No pasa nada si el archivo no existe o está vacío, simplemente la lista estará vacía
-        }
+    private fun guardarEnBaseDeDatosLocal(reparacion: Reparacion) {
+        lifecycleScope.launch {
+            try {
+                btnGuardar.isEnabled = false // Evitar doble click
 
-        // 2. Modificar la lista según si es edición o nueva
-        if (reparacionEditando != null) { // Es una edición
-            val index = reparacionesEnArchivo.indexOfFirst { it.id == reparacionEditando?.id }
-            if (index != -1) {
-                reparacionesEnArchivo[index] = nuevaReparacion // Reemplaza la reparación existente
-                Toast.makeText(this, "Reparación actualizada correctamente", Toast.LENGTH_SHORT).show()
-            } else {
-                // Esto no debería pasar si el ID funciona bien, pero por seguridad
-                reparacionesEnArchivo.add(nuevaReparacion) // Si no se encuentra, la añade como nueva
-                Toast.makeText(this, "Reparación no encontrada, se añadió como nueva.", Toast.LENGTH_SHORT).show()
-            }
-        } else { // Es una nueva reparación
-            reparacionesEnArchivo.add(nuevaReparacion)
-            Toast.makeText(this, "Reparación guardada correctamente", Toast.LENGTH_SHORT).show()
-        }
+                // Llamada a Room (sincrona dentro de la corrutina)
+                val database = AppDatabase.getDatabase(applicationContext)
+                database.reparacionDao().guardar(reparacion)
 
-        // 3. Volver a escribir todo el archivo con la lista actualizada
-        try {
-            val fileOutputStream = openFileOutput("reparaciones.txt", MODE_PRIVATE) // Usamos MODE_PRIVATE para SOBRESCRIBIR
-            val outputStreamWriter = OutputStreamWriter(fileOutputStream)
-            for (rep in reparacionesEnArchivo) {
-                outputStreamWriter.append(gson.toJson(rep)).append("\n")
+                Toast.makeText(this@CargaActivity, "Guardado localmente.", Toast.LENGTH_SHORT).show()
+                finish() // Volver a MainActivity
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this@CargaActivity, "Error al guardar: ${e.message}", Toast.LENGTH_LONG).show()
+                btnGuardar.isEnabled = true
             }
-            outputStreamWriter.close()
-            finish()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Error al guardar/actualizar la reparación: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
