@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listViewReparaciones: ListView
     private lateinit var btnNuevaReparacion: Button
     private lateinit var listaReparaciones: MutableList<Reparacion>
+    private var listaVisualizada: List<Reparacion> = ArrayList()
     private lateinit var adapter: ArrayAdapter<String>
     private lateinit var toolbar: Toolbar
     private lateinit var btnLimpiarBusqueda: Button
@@ -51,8 +52,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         listViewReparaciones.setOnItemClickListener { parent, view, position, id ->
-            if (position < listaReparaciones.size) {
-                mostrarDetallesReparacion(listaReparaciones[position])
+            if (position < listaVisualizada.size) {
+                mostrarDetallesReparacion(listaVisualizada[position])
             }
         }
 
@@ -154,6 +155,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun actualizarAdapter(listaAVisualizar: List<Reparacion> = listaReparaciones) {
+        listaVisualizada = listaAVisualizar
         adapter.clear()
         for (reparacion in listaAVisualizar) {
             val displayText = "${reparacion.nombre} ${reparacion.apellido}\nFecha: ${reparacion.fecha}"
